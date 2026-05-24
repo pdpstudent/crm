@@ -1,0 +1,44 @@
+name: CRM CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main # main branchga kod push qilinganda pipeline ishga tushadi
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. GitHub-dan kodni yuklab olish
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Java muhitini sozlash
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17' # Agar Java 21 bo'lsa, 21 deb o'zgartiring
+          distribution: 'corretto'
+          cache: maven
+
+      # 3. Spring Boot loyihani Maven orqali build qilish (.jar yaratish)
+      - name: Build with Maven
+        run: mvn clean package -DskipTests # Vaqtni tejash uchun testlarni o'tkazib yuborish
+
+      # 4. .jar va Procfile-ni bitta zip arxivga joylash (Beanstalk talabi)
+      - name: Generate deployment package
+        run: |
+          zip -r deploy.zip target/*.jar Procfile
+
+      # 5. Tayyor zip-ni AWS Elastic Beanstalk-ga joylash (Deploy)
+      - name: Deploy to AWS Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets::AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets::AWS_SECRET_ACCESS_KEY }}
+          application_name: 'crm-app' # 2-bosqichda yaratgan application nomi
+          environment_name: 'Crm-app-env ' # AWS Beanstalk sizga bergan environment nomi (paneldan ko'rib oling)
+          version_label: ${{ github.sha }}
+          region: 'ap-south-1' # AWS-da qaysi regionni tanlagan bo'lsangiz o'shani yozing (masalan, us-east-1 yoki eu-central-1)
+          deployment_package: deploy.zip
